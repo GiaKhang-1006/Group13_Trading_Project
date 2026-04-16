@@ -1,177 +1,263 @@
-# Mean Reversion Strategy on VNF301M
+# Group 13 — Multi-Strategy Trading System on VNF301M
 
 ## Abstract
-Dự án này kiểm thử chiến lược giao dịch đảo chiều (Mean Reversion) áp dụng trên hợp đồng tương lai chỉ số VN30 (VNF301M) tại khung thời gian 1 giờ (1h). Chiến lược sử dụng Z-Score để đo lường độ lệch của giá so với đường trung bình động (SMA) và tìm kiếm cơ hội khi giá có xu hướng hồi quy về giá trị trung bình. Kết quả kiểm thử cho thấy chiến lược đạt tỷ lệ thắng (Win Rate) trên 50% ở cả tập In-sample và Out-of-sample, tuy nhiên tỷ lệ Risk/Reward chưa tối ưu dẫn đến lợi nhuận tổng vẫn đang âm.
+
+Dự án xây dựng hệ thống giao dịch tự động đa chiến lược (Multi-Strategy) trên hợp đồng tương lai chỉ số VN30 (VNF301M). Hệ thống hỗ trợ hai chiến lược chính: **Trend Following (EMA Crossover)** và **Opening Range Breakout (ORB)**. Cả hai đều được tích hợp Stop Loss động dựa trên ATR, bộ lọc RSI và cơ chế thoát lệnh cuối phiên tự động. Việc chuyển đổi giữa các chiến lược được thực hiện chỉ bằng một dòng cấu hình duy nhất trong `main_live.py` và `run_backtest.py`.
+
+This project builds an automated multi-strategy trading system on the VN30 index futures contract (VNF301M). The system supports two main strategies: **Trend Following (EMA Crossover)** and **Opening Range Breakout (ORB)**. Both integrate dynamic ATR-based Stop Loss, RSI filters, and an automatic end-of-session exit mechanism. Switching between strategies requires changing only a single configuration line in `main_live.py` and `run_backtest.py`.
+
+---
 
 ## 0. Introduction
-- **Motivation (Tại sao?):** Thị trường phái sinh Việt Nam (VN30F) thường có những biên độ dao động giật (whipsaw) trong phiên hoặc giữa các phiên. Khi giá lệch quá xa so với mức trung bình ngắn hạn, xác suất xảy ra nhịp điều chỉnh (pullback) là rất cao.
-- **Method (Như thế nào?):** Dự án sử dụng chỉ báo thống kê Z-Score kết hợp với Simple Moving Average (SMA) để định lượng độ "căng" của giá. Lệnh được kích hoạt khi Z-Score vượt ngưỡng cực đại và đóng lại khi Z-Score quay về vùng an toàn.
-- **Goal (Mục tiêu?):** Xây dựng, cài đặt và kiểm thử (backtest) giả thuyết giao dịch này qua quy trình 9 bước của PLUTUS, hướng tới việc tối ưu hóa và đưa vào Paper Trading thực tế.
 
-## 1. Step 1: Trading Hypothesis
-Thị trường phái sinh VN30 (VNF301M) trong ngắn hạn (khung 1h) có tính chất đảo chiều về giá trị trung bình (mean-reverting). 
+**Motivation (Tại sao? / Why?)**
 
-- **Công thức tính Z-Score:** $$Z = \frac{Price - SMA}{\sigma}$$
-  *(Trong đó $\sigma$ là độ lệch chuẩn của giá trong chu kỳ tính toán).*
+Thị trường phái sinh VN30F có hai trạng thái phổ biến: (1) **xu hướng rõ ràng** sau khi tin tức hoặc dòng tiền lớn xuất hiện, và (2) **biến động mạnh trong buổi sáng** ngay sau khi phiên mở cửa. Mỗi trạng thái phù hợp với một chiến lược riêng biệt.
 
-- **Logic giao dịch:** - **Mở vị thế (Entry):** Mở Short khi Z-Score > 2.0 (Quá mua) / Mở Long khi Z-Score < -2.0 (Quá bán).  
-  - **Đóng vị thế (Exit):** Đóng lệnh khi Z-Score hồi về mốc 0.5 hoặc -0.5.  
-  - **Quản trị rủi ro (Stop Loss):** Cắt lỗ tuyệt đối khi Z-Score tiếp tục phá vỡ mốc 3.0 (xu hướng đi ngược giả thuyết quá mạnh).
+The VN30F derivatives market commonly exhibits two states: (1) **clear trending** after news or large capital flows, and (2) **strong morning volatility** right after the opening session. Each state suits a different strategy.
+
+**Method (Phương pháp / Approach)**
+
+- **EMA Crossover:** Bắt xu hướng bằng giao cắt EMA 10/30, lọc nhiễu bằng RSI và ATR Stop Loss động.
+- **ORB:** Xác định vùng giá High/Low của 30 phút đầu phiên (09:00–09:30) làm ngưỡng breakout. Vào lệnh khi giá phá vỡ vùng này với xác nhận khối lượng.
+
+- **EMA Crossover:** Captures trends via EMA 10/30 crossover, filtered by RSI and dynamic ATR Stop Loss.
+- **ORB:** Defines the High/Low range of the first 30 minutes (09:00–09:30) as the breakout threshold. Enters when price breaks out with volume confirmation.
+
+**Goal (Mục tiêu / Goals)**
+
+Xây dựng, kiểm thử và đưa vào Paper Trading một hệ thống giao dịch linh hoạt, có khả năng chuyển đổi chiến lược nhanh chóng theo điều kiện thị trường, tuân theo quy trình 9 bước của PLUTUS.
+
+Build, backtest, and deploy to Paper Trading a flexible trading system capable of rapidly switching strategies based on market conditions, following the PLUTUS 9-step process.
+
+---
+
+## 1. Step 1: Trading Hypotheses
+
+### 1.1 Trend Following — EMA Crossover
+
+Khi thị trường hình thành xu hướng, đường EMA ngắn hạn (10) sẽ cắt qua đường EMA dài hạn (30). Đây là tín hiệu xác nhận momentum và là thời điểm phù hợp để gia nhập vị thế theo xu hướng.
+
+When the market forms a trend, the short-term EMA (10) crosses the long-term EMA (30). This confirms momentum and signals an entry aligned with the trend.
+
+| Sự kiện / Event | Hành động / Action |
+| :--- | :--- |
+| EMA 10 cắt lên EMA 30 + RSI ∈ [45, 75] | Mở **LONG** / Open **LONG** |
+| EMA 10 cắt xuống EMA 30 + RSI ∈ [25, 55] | Mở **SHORT** / Open **SHORT** |
+| EMA cắt ngược chiều | Đóng vị thế / Close position |
+| Chạm ATR Stop Loss | Cắt lỗ / Stop out |
+| 11:25–11:30 hoặc 14:40–14:45 | Force exit cuối phiên / Force exit EOD |
+
+### 1.2 Opening Range Breakout (ORB)
+
+Trong 30 phút đầu phiên (09:00–09:30), giá hình thành một vùng dao động (Opening Range). Khi giá phá vỡ vùng này kèm khối lượng xác nhận, xu hướng trong phiên thường tiếp diễn theo hướng breakout.
+
+In the first 30 minutes (09:00–09:30), price forms an Opening Range. When price breaks out of this range with volume confirmation, the intraday trend tends to continue in the breakout direction.
+
+| Sự kiện / Event | Hành động / Action |
+| :--- | :--- |
+| Giá phá vỡ ORB High + Volume > 110% MA20 | Mở **LONG** / Open **LONG** |
+| Giá phá vỡ ORB Low + Volume > 110% MA20 | Mở **SHORT** / Open **SHORT** |
+| Chạm ATR Stop Loss (×3.5) | Cắt lỗ / Stop out |
+| Trailing Stop kích hoạt sau lãi ≥ 1×ATR | Bảo vệ lãi / Protect profit |
+| Vào giờ nghỉ trưa / cuối phiên | Force exit / Force exit EOD |
+
+**Giới hạn:** Tối đa 1 LONG + 1 SHORT mỗi ngày để tránh over-trading sau khi dính Stop Loss.
+
+**Limit:** Maximum 1 LONG + 1 SHORT per day to avoid over-trading after a stop-out.
+
+---
 
 ## 2. Step 2 & 3: Data
 
 ### 2.1 Data Collection
-- **Sản phẩm:** Hợp đồng tương lai VN30 (Các kỳ hạn nối tiếp tạo thành chuỗi VNF301M liên tục).
-- **Nguồn dữ liệu:** Database official của khóa học Algotrade (Sử dụng credential được cung cấp để query trực tiếp).
-- **Định dạng gốc:** Dữ liệu Tick (Tick data) bao gồm thông tin giá và khối lượng khớp lệnh theo thời gian thực.
+
+| Thuộc tính / Attribute | Chi tiết / Detail |
+| :--- | :--- |
+| **Sản phẩm / Product** | VN30 Futures — Chuỗi liên tục VNF301M |
+| **Nguồn / Source** | Database Algotrade (credentials trong `config.py`) |
+| **Định dạng gốc / Raw format** | Tick data (giá + khối lượng khớp theo thời gian thực) |
+| **Kho / Repository** | `quote.matched` JOIN `quote.total` |
 
 ### 2.2 Data Processing
-- **Xử lý:** Dữ liệu Tick được tải về và tổng hợp (resample) thành nến OHLCV ở khung thời gian **1 hour (1h)**.
-- **Rollover:** Quá trình chuyển kỳ hạn hợp đồng (rollover) được xử lý tự động để đảm bảo chuỗi giá liên tục không bị đứt gãy giữa các tháng đáo hạn. 
+
+- **Resample:** Tick data → OHLCV bars theo timeframe cấu hình (`config.STRATEGY["timeframe"]`).
+- **Giờ giao dịch / Trading hours:** Chỉ lấy dữ liệu trong khung 09:00–14:45.
+- **Rollover:** Tự động xử lý chuyển kỳ hạn theo `ROLL_SCHEDULE` trong `config.py` — xóa duplicate tại điểm roll để đảm bảo chuỗi liên tục.
+- **Tick data is resampled** into OHLCV bars at the configured timeframe. Only bars within 09:00–14:45 are kept. Contract rollover is handled automatically via the `ROLL_SCHEDULE` in `config.py`, with duplicates at roll points removed.
+
+---
 
 ## 3. Implementation (How to Run)
-Để chạy lại (reproduce) toàn bộ kết quả của dự án này, vui lòng làm theo các bước sau:
 
-**Môi trường:**
-Dự án sử dụng Python thông qua môi trường Anaconda (`plutus_x86`).
+### 3.1 Môi trường / Environment
 
-1. Kích hoạt môi trường: `conda activate plutus_x86`
-2. Cài đặt các thư viện cần thiết (nếu có): `pip install -r requirements.txt`
+```bash
+conda activate plutus_x86
+pip install -r requirements.txt
+```
 
-**Chạy mã nguồn:**
-- **Bước 1 (Load & Xử lý data):** Chạy module loader để tải và resample dữ liệu:
-  ```bash
-  python -m src.data.loader
-  ```
+### 3.2 Đổi chiến lược / Switch Strategy
 
+Chỉ cần sửa **1 dòng** ở đầu mỗi file / Just change **1 line** at the top of each file:
 
-- **Bước 2 (Chạy Backtest):** Thực thi lệnh sau để chạy toàn bộ quá trình backtest cho cả In-sample và Out-of-sample:
-  ```bash
-  python -m run_backtest
-  ```
-  *(Cấu hình tham số chiến lược được đặt sẵn trong file `run_backtest.py`)*
+```python
+# main_live.py  &  run_backtest.py
+ACTIVE_STRATEGY = "ema"    # "ema" | "orb" | "mean"
+```
 
-- **Đầu ra (Output):** Các biểu đồ (`backtest_chart.png`) và danh sách lệnh (`trades.csv`) sẽ được lưu tự động vào các thư mục `results/insample/` và `results/outsample/`.
+| Giá trị / Value | Chiến lược / Strategy |
+| :--- | :--- |
+| `"ema"` | Trend Following — EMA 10/30 Crossover |
+| `"orb"` | Opening Range Breakout + ATR Trailing Stop |
+| `"mean"` | Mean Reversion — Z-Score + Bollinger Bands |
+
+### 3.3 Chạy Backtest / Run Backtest
+
+```bash
+# Bước 1: Kiểm tra data loader
+python -m src.data.loader
+
+# Bước 2: Chạy backtest (In-sample + Out-of-sample)
+python run_backtest.py
+```
+
+**Output:**
+- `results/insample/backtest_chart.png` — Biểu đồ In-sample
+- `results/outsample/backtest_chart.png` — Biểu đồ Out-of-sample
+- `results/insample/trades.csv` — Danh sách lệnh In-sample
+- `results/outsample/trades.csv` — Danh sách lệnh Out-of-sample
+
+### 3.4 Chạy Live / Run Live Bot
+
+```bash
+python main_live.py
+```
+
+Bot sẽ tự động kết nối FIX, lấy data realtime, tính tín hiệu và đặt lệnh. Dashboard in ra terminal mỗi nến. Thông báo giao dịch được gửi qua Telegram.
+
+The bot automatically connects via FIX, fetches real-time data, computes signals, and places orders. A dashboard is printed to the terminal on each candle. Trade notifications are sent via Telegram.
+
+---
 
 ## 4. Step 4: In-sample Backtesting
-- **Giai đoạn:** 2023-01-01 → 2024-06-30 (18 tháng)
-- **Cấu hình tham số:** Window = 20, Entry = 2.0, Exit = 0.5, Stop Loss = 3.0.
-- **Dữ liệu đầu vào:** 19 hợp đồng VN30F (từ 2301 đến 2407), tổng cộng 1,817 bars (khung 1h).
 
-### 4.1 Result
+- **Giai đoạn / Period:** 2023-01-01 → 2024-12-30 (24 tháng / months)
+- **Timeframe:** 15 phút / minutes
+
+### 4.1 EMA Strategy — In-sample Result
 
 | Metric | Value |
 | :--- | :--- |
-| **Total Trades** | 61 |
-| **Win Rate** | 52.46% |
-| **Total Return** | -2.48% |
-| **Sharpe Ratio** | -0.241 |
-| **Max Drawdown** | -4.02% |
-| **Profit Factor** | 0.867 |
-| **Avg Win / Avg Loss** | 1,595,625 VND / -2,031,897 VND |
+| **Total Trades** | — |
+| **Win Rate** | — |
+| **Total Return** | — |
+| **Sharpe Ratio** | — |
+| **Max Drawdown** | — |
+| **Profit Factor** | — |
+| **Avg Win / Avg Loss** | — VND / — VND |
+
+### 4.2 ORB Strategy — In-sample Result
+
+| Metric | Value |
+| :--- | :--- |
+| **Total Trades** | — |
+| **Win Rate** | — |
+| **Total Return** | — |
+| **Sharpe Ratio** | — |
+| **Max Drawdown** | — |
+| **Profit Factor** | — |
+| **Avg Win / Avg Loss** | — VND / — VND |
+
+---
 
 ## 5. Step 5: Optimization
-Hiện tại, chiến lược đang sử dụng các tham số heuristic (kinh nghiệm). Quá trình tối ưu hóa (Optimization) để tìm ra bộ tham số (Window, Entry/Exit Threshold) tốt nhất cho Profit Factor sẽ được tiến hành và báo cáo chi tiết trong giai đoạn chuẩn bị cho Paper Trading.
+
+Các tham số có thể tối ưu hóa cho từng chiến lược / Parameters available for optimization per strategy:
+
+**EMA:**
+- `ema_fast` / `ema_slow` spans (hiện tại: 10/30)
+- RSI filter band (hiện tại: Long ∈ [45,75] / Short ∈ [25,55])
+- `atr_multiplier` cho Stop Loss (hiện tại: 2.0)
+
+**ORB:**
+- `atr_mult_sl` — SL ban đầu (hiện tại: 3.5×)
+- `atr_mult_trail` — Trailing stop (hiện tại: 3.0×)
+- `atr_activate` — Ngưỡng kích hoạt trailing (hiện tại: 1.0×)
+- `vol_confirm` — Ngưỡng khối lượng xác nhận (hiện tại: 1.1×)
+
+---
 
 ## 6. Step 6: Out-of-sample Backtesting
-- **Giai đoạn:** 2024-07-01 → 2024-12-31 (6 tháng)
-- **Cấu hình tham số:** Tương tự như In-sample để đánh giá độ ổn định.
-- **Dữ liệu đầu vào:** 6 hợp đồng VN30F (từ 2407 đến 2412), tổng cộng 610 bars (khung 1h).
 
-### 6.1 Result
+- **Giai đoạn / Period:** 2025-01-01 → 2025-12-31 (12 tháng / months)
+- **Cấu hình:** Tương tự In-sample để đánh giá độ ổn định / Same parameters as In-sample to assess stability.
+
+### 6.1 EMA Strategy — Out-of-sample Result
 
 | Metric | Value |
 | :--- | :--- |
-| **Total Trades** | 23 |
-| **Win Rate** | 56.52% |
-| **Total Return** | -1.66% |
-| **Sharpe Ratio** | -0.581 |
-| **Max Drawdown** | -3.26% |
-| **Profit Factor** | 0.671 |
-| **Avg Win / Avg Loss** | 1,066,538 VND / -2,066,000 VND |
+| **Total Trades** | — |
+| **Win Rate** | — |
+| **Total Return** | — |
+| **Sharpe Ratio** | — |
+| **Max Drawdown** | — |
+| **Profit Factor** | — |
+| **Avg Win / Avg Loss** | — VND / — VND |
 
-> **Ghi chú:** Số lượng trade ở OOS là 23 (chưa đạt mốc >=30) do thời gian test khá ngắn (6 tháng) trên khung thời gian lớn (1h).
+### 6.2 ORB Strategy — Out-of-sample Result
+
+| Metric | Value |
+| :--- | :--- |
+| **Total Trades** | — |
+| **Win Rate** | — |
+| **Total Return** | — |
+| **Sharpe Ratio** | — |
+| **Max Drawdown** | — |
+| **Profit Factor** | — |
+| **Avg Win / Avg Loss** | — VND / — VND |
+
+---
 
 ## 7. Conclusion
-Chiến lược Mean Reversion trên VNF301M thể hiện khả năng dự báo điểm đảo chiều khá tốt với tỷ lệ thắng (Win Rate) duy trì trên 50% ổn định từ In-sample sang Out-of-sample. Dù vậy, điểm yếu cố hữu nằm ở mức Cắt lỗ (Stop Loss) hiện tại quá rộng, dẫn đến lỗ trung bình lớn hơn lãi trung bình và tổng lợi nhuận âm. Dự án sẽ tiếp tục tinh chỉnh quản trị rủi ro ở Step 7 (Paper Trading).
 
+**EMA Crossover** phù hợp với các phiên có xu hướng rõ ràng, đặc biệt là khi thị trường chịu tác động của tin tức hoặc dòng tiền lớn. Điểm mạnh là logic đơn giản, dễ kiểm soát rủi ro. Điểm yếu là dễ bị "whipsaw" trong thị trường sideway.
 
+**ORB** khai thác tốt biến động đầu phiên — thời điểm có thanh khoản cao và breakout thường có chất lượng tốt. Trailing Stop giúp bảo vệ lãi trong các sóng dài. Điểm yếu là số lượng lệnh ít (tối đa 2 lệnh/ngày) nên cần thời gian backtest đủ dài để có kết quả có ý nghĩa thống kê.
 
+Hệ thống được thiết kế để chuyển đổi linh hoạt giữa các chiến lược chỉ bằng một dòng code, cho phép nhóm phản ứng nhanh với từng giai đoạn thị trường trong Paper Trading.
 
+---
 
-# Mean Reversion Strategy on VNF301M
-## Abstract
-This project tests the Mean Reversion trading strategy applied to the VN30 index futures contract (VNF301M) at a 1-hour (1h) timeframe. The strategy uses Z-Score to measure the deviation of the price from the simple moving average (SMA) and seeks opportunities when the price tends to revert to the average value. Test results show that the strategy achieves a win rate of over 50% in both the In-sample and Out-of-sample sets. However, the Risk/Reward ratio is not yet optimized, resulting in negative overall profits.
-## 0. Introduction
-- **Motivation (Why?):** The Vietnamese derivatives market (VN30F) often experiences whipsaw fluctuations during or between sessions. When prices deviate too far from the short-term average, the probability of a pullback is very high.
-- **Method (How?):** The project uses the Z-Score statistical indicator combined with Simple Moving Average (SMA) to quantify price “tension.” Orders are triggered when the Z-Score exceeds the maximum threshold and closed when the Z-Score returns to the safe zone.
-- **Goal:** Build, set up, and backtest this trading hypothesis through PLUTUS's 9-step process, aiming to optimize and implement it in real Paper Trading.
-## 1. Step 1: Trading Hypothesis
-The VN30 derivatives market (VNF301M) in the short term (1-hour timeframe) has mean-reverting properties.
-- **Z-Score calculation formula:** $$Z = \frac{Price - SMA}{\sigma}$$
-  
-*(Where $\sigma$ is the standard deviation of the price in the calculation period).*
-- **Trading Logic:** - **Open Position (Entry):** Open Short when Z-Score > 2.0 (Overbought) / Open Long when Z-Score < -2.0 (Oversold).
-    
-- **Close position (Exit):** Close the order when Z-Score returns to 0.5 or -0.5.  
-- **Risk management (Stop Loss):** Cut losses immediately when Z-Score continues to break through 3.0 (the countertrend hypothesis is too strong).
-## 2. Step 2 & 3: Data
-### 2.1 Data Collection
-- **Product:** VN30 futures contract (Successive maturities form a continuous VNF301M series).
-- **Data source:** Official database of the Algotrade course (Use the provided credentials to query directly).
-- **Original format:** Tick data including real-time price and order volume information.
-### 2.2 Data Processing
-- **Processing:** Tick data is downloaded and resampled into OHLCV candles at the **1-hour (1h)** timeframe.
-- **Rollover:** The contract rollover process is handled automatically to ensure a continuous price series without gaps between expiration months.
-## 3. Implementation (How to Run)
-To reproduce the entire results of this project, please follow these steps:
-**Environment:**
-The project uses Python through the Anaconda environment (`plutus_x86`).
-1. Activate the environment: `conda activate plutus_x86`
-2. Install the necessary libraries (if any): `pip install -r requirements.txt`
-**Run the source code:**
-- **Step 1 (Load & Process data):** Run the loader module to load and resample the data:
-    ```bash
-    python -m src.data.loader
-    ```
+**EMA Crossover** suits sessions with a clear trend direction, especially when driven by news or large capital flows. Its strength is simplicity and controllable risk. Its weakness is susceptibility to whipsaws in sideways markets.
 
-- **Step 2 (Run Backtest):** Execute the following command to run the entire backtest process for both In-sample and Out-of-sample:
-    ```bash
-    python -m run_backtest
-    ```
-  
-*(Strategy parameter configuration is pre-set in the `run_backtest.py` file)*
-- **Output:** Charts (`backtest_chart.png`) and order lists (`trades.csv`) will be automatically saved to the `results/insample/` and `results/outsample/` directories.
-## 4. Step 4: In-sample Backtesting
-- **Period:** 2023-01-01 → 2024-06-30 (18 months)
-- **Parameter configuration:** Window = 20, Entry = 2.0, Exit = 0.5, Stop Loss = 3.0.
-- **Input data:** 19 VN30F contracts (from 2301 to 2407), totaling 1,817 bars (1h timeframe).
-### 4.1 Result
-| Metric | Value |
-| :--- | :--- |
-| **Total Trades** | 61 |
-| **Win Rate** | 52.46% |
-| **Total Return** | -2.48% |
-| **Sharpe Ratio** | -0.241 |
-| **Max Drawdown** | -4.02% |
-| **Profit Factor** | 0.867 |
-| **Avg Win / Avg Loss** | 1,595,625 VND / -2,031,897 VND |
-## 5. Step 5: Optimization
-Currently, the strategy uses heuristic (experience-based) parameters. The optimization process to find the best set of parameters (Window, Entry/Exit Threshold) for Profit Factor will be conducted and reported in detail during the Paper Trading preparation phase.
-## 6. Step 6: Out-of-sample Backtesting
-- **Period:** July 1, 2024 → December 31, 2024 (6 months)
-- **Parameter configuration:** Similar to In-sample to assess stability.
-- **Input data:** 6 VN30F contracts (from 2407 to 2412), totaling 610 bars (1h timeframe).
-### 6.1 Result
-| Metric | Value |
-| :--- | :--- |
-| **Total Trades** | 23 |
-| **Win Rate** | 56.52% |
-| **Total Return** | -1.66% |
-| **Sharpe Ratio** | -0.581 |
-| **Max Drawdown** | -3.26% |
-| **Profit Factor** | 0.671 |
-| **Avg Win / Avg Loss** | 1,066,538 VND / -2,066,000 VND |
-> **Note:** The number of trades in OOS is 23 (not reaching the threshold of >=30) due to the relatively short testing period (6 months) on a large timeframe (1h).
-## 7. Conclusion
-The Mean Reversion strategy on VNF301M demonstrates a fairly good ability to predict reversal points with a Win Rate that remains above 50% consistently from In-sample to Out-of-sample. However, the inherent weakness lies in the current Stop Loss level being too wide, leading to average losses greater than average profits and a negative total profit. The project will continue to refine risk management in Step 7 (Paper Trading).
+**ORB** effectively exploits early-session volatility — a period of high liquidity where breakouts tend to have higher quality. The Trailing Stop protects profits during extended moves. Its weakness is a low trade count (max 2 per day), requiring a sufficiently long backtest period for statistically meaningful results.
+
+The system is designed to switch between strategies with a single line of code, allowing the team to respond quickly to different market phases during Paper Trading.
+
+---
+
+## 8. Project Structure
+
+```
+.
+├── config/
+│   └── config.py              # Toàn bộ cấu hình (STRATEGY, BACKTEST, DB, FIX)
+├── src/
+│   ├── data/
+│   │   └── loader.py          # Load & resample tick data → OHLCV
+│   ├── features/
+│   │   └── indicators.py      # Tính toán EMA, RSI, ATR, Z-Score, Bollinger Bands
+│   ├── strategy/
+│   │   ├── trend_following.py # EMA Crossover strategy
+│   │   ├── orb_strategy.py    # Opening Range Breakout strategy
+│   │   └── mean_reversion.py  # Mean Reversion (Z-Score) strategy
+│   └── backtest/
+│       ├── engine.py          # Event-driven backtest engine
+│       └── metrics.py         # Tính Sharpe, Drawdown, Win Rate, v.v.
+├── main_live.py               # 🔴 Live bot — đổi ACTIVE_STRATEGY để switch
+├── run_backtest.py            # 📊 Backtest runner — đổi ACTIVE_STRATEGY để switch
+└── results/
+    ├── insample/
+    └── outsample/
+```

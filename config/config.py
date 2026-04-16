@@ -206,7 +206,7 @@ ROLL_SCHEDULE = [
 # ── ORB Strategy Parameters ────────────────────────────────────────────────────
 STRATEGY = {
     "symbol":          "VNF301M",       # Continuous contract (dùng cho live)
-    "timeframe":       "15min",          # Khung 1 phút
+    "timeframe":       "1min",          # Khung 1 phút
     "window":          60,              # Dùng cho zscore/BB (giữ để backtest cũ chạy được)
     "atr_multiplier":  2.0,             # SL ban đầu = 2 × ATR
     "trail_multiplier":1.5,             # Trailing stop = 1.5 × ATR
