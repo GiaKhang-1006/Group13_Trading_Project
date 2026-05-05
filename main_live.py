@@ -9,7 +9,7 @@ main_live.py — Group 13 Master Bot
 
 # ══════════════════════════════════════════════════════
 #  👇 CHỈ SỬA DÒNG NÀY KHI MUỐN ĐỔI CHIẾN LƯỢC
-ACTIVE_STRATEGY = "orb"   # "ema" | "orb" | "mean"
+ACTIVE_STRATEGY = "ema"   # "ema" | "orb" | "mean"
 # ══════════════════════════════════════════════════════
 
 import time
