@@ -56,7 +56,7 @@
 
 import pandas as pd
 import numpy as np
-from Temp.config.config import STRATEGY
+from config.config import STRATEGY
 
 def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()

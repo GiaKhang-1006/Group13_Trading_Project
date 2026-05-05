@@ -9,7 +9,7 @@ run_backtest.py — Group 13 Backtest Runner
 
 # ══════════════════════════════════════════════════════
 #  👇 CHỈ SỬA DÒNG NÀY KHI MUỐN ĐỔI CHIẾN LƯỢC
-ACTIVE_STRATEGY = "orb"   # "ema" | "orb" | "mean"
+ACTIVE_STRATEGY = "ema"   # "ema" | "orb" | "mean"
 # ══════════════════════════════════════════════════════
 
 import os
@@ -222,7 +222,7 @@ def _save_chart(df: pd.DataFrame, result: dict, label: str, save_dir: str):
     equity = result["equity_curve"]
     init   = BACKTEST["initial_capital"]
     ax.plot(equity.index, equity.values, color="royalblue", lw=1.3, label="Portfolio")
-    ax.axhline(init, color="gray", ls="--", lw=0.8, label=f"Vốn ({init:,.0f} VNĐ)")
+    ax.axhline(init, color="gray", ls="--", lw=0.8, label=f"Money ({init:,.0f} VNĐ)")
     ax.fill_between(equity.index, equity.values, init,
                     where=(equity.values >= init), alpha=0.10, color="green")
     ax.fill_between(equity.index, equity.values, init,
