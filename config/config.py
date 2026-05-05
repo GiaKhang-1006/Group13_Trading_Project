@@ -205,14 +205,14 @@ ROLL_SCHEDULE = [
 
 # ── ORB Strategy Parameters ────────────────────────────────────────────────────
 STRATEGY = {
-    "symbol":          "VNF301M",       # Continuous contract (dùng cho live)
+    "symbol":          "HNXDS:VN30F2605",       # Continuous contract (dùng cho live)
     "timeframe":       "1min",          # Khung 1 phút
     "window":          60,              # Dùng cho zscore/BB (giữ để backtest cũ chạy được)
     "atr_multiplier":  2.0,             # SL ban đầu = 2 × ATR
     "trail_multiplier":1.5,             # Trailing stop = 1.5 × ATR
     "vol_confirm":     1.1,             # Volume phải > 110% vol_ma
     "contract_size":   100_000,         # 1 điểm = 100,000 VNĐ
-    "target_qty_unit": 3,               # Số hợp đồng mỗi lệnh
+    "target_qty_unit": 1,               # Số hợp đồng mỗi lệnh
 
     # Giữ lại các key cũ để run_backtest.py không báo lỗi KeyError
     "entry_threshold": 1.8,
